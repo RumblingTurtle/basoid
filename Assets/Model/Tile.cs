@@ -8,7 +8,11 @@ public class Tile
     public enum TileType { Empty, Floor, Wall };
 
     //Current tile type
+    [SerializeField]
     private TileType type;
+
+    int x;
+    int y;
 
     //Tile type change callback delegate
     private Action<Tile> typeChangeCallbacks;
@@ -26,6 +30,9 @@ public class Tile
                 typeChangeCallbacks(this);
         }
     }
+
+    public int X { get => x; set => x = value; }
+    public int Y { get => y; set => y = value; }
 
     public Tile(TileType type)
     {
@@ -48,4 +55,8 @@ public class Tile
         typeChangeCallbacks -= callback;
     }
 
+    public bool isWall()
+    {
+        return type == TileType.Wall;
+    }
 }
