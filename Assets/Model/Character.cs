@@ -99,12 +99,6 @@ public class Character
         List<PathTile> closedSet = new List<PathTile>();
         List<PathTile> openedSet = new List<PathTile>();
 
-        //Checks if coordinates are within map bounds
-        bool isBound(int a, int b)
-        {
-            return Mathf.Clamp(a, 0, width-1) == a && Mathf.Clamp(b, 0, height-1) == b;
-        }
-
         //Adds unchecked accessible neighbours of a given tile
         void addNeighbours(PathTile tile)
         {
@@ -115,8 +109,8 @@ public class Character
                     bool isCurrentOrDiagonal = i==j;
 
                     if (isCurrentOrDiagonal || 
-                        !isBound(tile.x + i, tile.y + j) || 
-                        currentMap.getTile(tile.x + i, tile.y + j).isWalkable()||
+                        !currentMap.isBound(tile.x + i, tile.y + j) || 
+                        !currentMap.getTile(tile.x + i, tile.y + j).isWalkable()||
                         closedSet.Contains(tileMat[tile.x + i, tile.y + j])||
                         openedSet.Contains(tileMat[tile.x + i, tile.y + j]))
                         continue;

@@ -92,6 +92,12 @@ public class Map
         }
     }
 
+    //Checks if coordinates are within map bounds
+    public bool isBound(int a, int b)
+    {
+        return Mathf.Clamp(a, 0, Width - 1) == a && Mathf.Clamp(b, 0, Height - 1) == b;
+    }
+
     //Returns tile at a specific location
     public Tile getTile(int x, int y)
     {

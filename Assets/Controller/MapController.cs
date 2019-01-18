@@ -187,34 +187,27 @@ public class MapController : MonoBehaviour
     {
         if (tile.Type == Tile.TileType.Floor)
             tileObj.GetComponent<SpriteRenderer>().sprite = floorSprite;
-        else if (tile.Type == Tile.TileType.Wall)
+        else if (tile.isWall())
         {
             int x = tile.X;
             int y = tile.Y;
             tileObj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x, y);
 
-            //Update neighbours
-            if (y + 1 < mapHeight && map.getTile(x, y + 1).isWalkable())
-            {
-                GameObject ntileobj = GameObject.Find("tile_" + x + "_" + (y + 1));
-                ntileobj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x, y + 1);
-            }   
-            if (y - 1 >= 0 && map.getTile(x, y - 1).isWalkable())
-            {
-                GameObject ntileobj = GameObject.Find("tile_" + x + "_" + (y - 1));
-                ntileobj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x, y - 1);
-            }
-            if (x - 1 >= 0 && map.getTile(x - 1, y).isWalkable())
-            {
-                GameObject ntileobj = GameObject.Find("tile_" + (x-1) + "_" + y);
-                ntileobj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x-1, y);
-            }
-            if (x + 1 < mapWidth && map.getTile(x + 1, y).isWalkable())
-            {
-                GameObject ntileobj = GameObject.Find("tile_" + (x+1) + "_" + y);
-                ntileobj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x+1, y);
-            }
 
+            //Update neighbours
+            for (int i = -1; i < 2; i++)
+            {
+                for (int j = -1; j < 2; j++)
+                {
+                    bool isCurrentOrDiagonal = i == j;
+
+                    if (!isCurrentOrDiagonal && map.isBound(x + i, y + j) && map.getTile(x + i, y + j).isWall())
+                    {
+                        GameObject ntileobj = GameObject.Find("tile_" + (x + i) + "_" + (y + j));
+                        ntileobj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x + i, y + j);
+                    }
+                }
+            }
         }
         else if (tile.Type == Tile.TileType.Empty)
             tileObj.GetComponent<SpriteRenderer>().sprite = null;
@@ -227,13 +220,13 @@ public class MapController : MonoBehaviour
     {
 
         string spritename = "stonewall";
-        if (y + 1 < mapHeight && map.getTile(x,y+1).isWalkable())
+        if (y + 1 < mapHeight && map.getTile(x,y+1).isWall())
             spritename += "_U";
-        if (y - 1 >= 0 && map.getTile(x, y-1).isWalkable())
+        if (y - 1 >= 0 && map.getTile(x, y-1).isWall())
             spritename += "_D";
-        if (x - 1 >= 0 && map.getTile(x-1, y).isWalkable())
+        if (x - 1 >= 0 && map.getTile(x-1, y).isWall())
             spritename += "_L";
-        if (x + 1< mapWidth && map.getTile(x + 1, y).isWalkable())
+        if (x + 1< mapWidth && map.getTile(x + 1, y).isWall())
             spritename += "_R";
 
         //Debug.Log(x+" "+ y+" "+spritename);
