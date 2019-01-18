@@ -1,5 +1,4 @@
-﻿using System.Collections;
-using System.Collections.Generic;
+﻿using UnityEngine.EventSystems;
 using UnityEngine;
 
 public class CameraController : MonoBehaviour
@@ -16,6 +15,9 @@ public class CameraController : MonoBehaviour
 
     void Update()
     {
+        if (CameraController.isMouseOverUI() || MapController.commandMode)
+            return;
+
         registerCameraDrag();
         registerCameraZoom();
     }
@@ -79,6 +81,16 @@ public class CameraController : MonoBehaviour
             float zoomDelta = (currentDist - prevDist)*zoomSpeed;
             Camera.main.orthographicSize = Mathf.Clamp(Camera.main.orthographicSize - zoomDelta, 4, 10);
         }
+    }
+
+    public static bool isMouseOverUI()
+    {
+        if (Application.platform == RuntimePlatform.Android)
+        {
+            return EventSystem.current.IsPointerOverGameObject(Input.GetTouch(0).fingerId);
+        }
+        else
+         return EventSystem.current.IsPointerOverGameObject();
     }
 }
        

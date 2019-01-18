@@ -55,7 +55,7 @@ public class Tile
         typeChangeCallbacks -= callback;
     }
 
-    public bool isWall()
+    public bool isWalkable()
     {
         return type == TileType.Wall;
     }
