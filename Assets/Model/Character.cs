@@ -30,7 +30,9 @@ public class Character
 
     public bool isMoving()
     {
-        if ((int)X == (int)destx && (int)Y == (int)desty)
+        Vector2 currentPos = new Vector2(X, Y);
+        Vector2 destination = new Vector2(destx, desty);
+        if (Vector2.Distance(currentPos,destination)==0)
             return false;
         else
             return true;
@@ -59,6 +61,7 @@ public class Character
             desty = next.Item2;
         }
 
+        
         X = Mathf.MoveTowards(x, destx, speed * Time.deltaTime);
         Y = Mathf.MoveTowards(y, desty, speed * Time.deltaTime);
     }
@@ -68,6 +71,13 @@ public class Character
         //Stop at a current closest tile in case of pending movement
         destx = (int)X;
         desty = (int)Y;
+
+
+        if (x == (int)destx && y == (int)desty)
+            return;
+
+        Debug.Log((int)destx + " " + (int)desty);
+        Debug.Log(x + " " + y);
 
         //Recalculate path
         calculatePath(x, y, currentMap);
@@ -106,7 +116,7 @@ public class Character
             {
                 for (int j = -1; j < 2; j++)
                 {
-                    bool isCurrentOrDiagonal = i==j;
+                    bool isCurrentOrDiagonal = Mathf.Abs(i) == Mathf.Abs(j);
 
                     if (isCurrentOrDiagonal || 
                         !currentMap.isBound(tile.x + i, tile.y + j) || 
@@ -121,7 +131,7 @@ public class Character
                     neighbour.y = tile.y+j;
 
                     //Euclidian distance as heuristic metric
-                    neighbour.h = Mathf.Sqrt(Mathf.Pow(x - neighbour.x, 2) + Mathf.Pow(y - neighbour.y, 2));
+                    neighbour.h = Vector2.Distance(new Vector2(x, y), new Vector2(neighbour.x, neighbour.y));
                     //A step from tile to tile costs 1 unit
                     neighbour.g = tile.g+1;
 
@@ -140,11 +150,11 @@ public class Character
         //Starting point initialization
         PathTile start = new PathTile();
         start.g = 0;
-        start.h = Mathf.Sqrt(Mathf.Pow(x - (int)X, 2) + Mathf.Pow(y - (int)Y, 2));
-        start.x = (int)X;
-        start.y = (int)Y;
-        tileMat[(int)X, (int)Y] = start;
-        closedSet.Add(tileMat[(int)X, (int)Y]);
+        start.h = Vector2.Distance(new Vector2(x, y), new Vector2(destx, desty));
+        start.x = (int)destx;
+        start.y = (int)desty;
+        tileMat[(int)destx, (int)desty] = start;
+        closedSet.Add(tileMat[(int)destx, (int)desty]);
 
         addNeighbours(start);
         
@@ -163,15 +173,16 @@ public class Character
                 }
             }
 
-            //Debug.Log("Best tile: " + bestTile.x + " " + bestTile.y);
-
-            addNeighbours(bestTile);
-            openedSet.Remove(bestTile);
-            closedSet.Add(bestTile);
-
             //If destination is reached
             if (bestTile.x == x && bestTile.y == y)
                 break;
+
+            //Debug.Log("Best tile: " + bestTile.x + " " + bestTile.y);
+            openedSet.Remove(bestTile);
+            closedSet.Add(bestTile);
+
+            addNeighbours(bestTile);
+
         }
 
         //If no route exists then return
@@ -180,21 +191,19 @@ public class Character
 
         //Clear the stack
         currentPath.Clear();
-
-        //Push the last best tile == destination
-        currentPath.Push(new Tuple<int,int>(bestTile.x,bestTile.y));
-
         //Until current position is reached
-        while (bestTile.x!=(int)X && bestTile.y!= (int)Y)
+        while (bestTile.x!= (int)destx || bestTile.y != (int)desty)
         {
             //Update stack and traverse backwards from the current bestTile value
-            currentPath.Push(bestTile.camefrom);
-            bestTile = tileMat[currentPath.Peek().Item1, currentPath.Peek().Item2];
+            currentPath.Push(new Tuple<int,int>(bestTile.x, bestTile.y));
+            bestTile = tileMat[bestTile.camefrom.Item1, bestTile.camefrom.Item2];
         }
 
+        /*
         //Get next path point from the stack
         Tuple<int,int> next = currentPath.Pop();
         destx = next.Item1;
         desty = next.Item2;
+        */
     }
 }

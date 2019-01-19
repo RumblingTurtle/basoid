@@ -11,6 +11,7 @@ public class MapController : MonoBehaviour
     public Sprite selectionSprite; // Mouse selection sprite
     public Sprite backgroundSprite; // Background dirt sprite  
     public Sprite characterSprite; // Default character sprite
+    public Sprite destSprite; // Default character sprite
 
     //Object for tile groupings
     GameObject backgroundGroup;
@@ -142,6 +143,7 @@ public class MapController : MonoBehaviour
         {
             start = new Vector3(character.Destx + 0.5f, character.Desty + 0.5f, -8);
             direction = new Vector3(path[0].Item1 + 0.5f, path[0].Item2 + 0.5f, -8);
+            //GameObject d = initObj("dest", direction, destSprite);
             Debug.DrawLine(start, direction, color);
         }
 
@@ -149,6 +151,7 @@ public class MapController : MonoBehaviour
         {
             start = new Vector3(path[i].Item1 + 0.5f, path[i].Item2 + 0.5f, -8);
             direction = new Vector3(path[i + 1].Item1 + 0.5f, path[i + 1].Item2 + 0.5f, -8);
+            //GameObject p = initObj("d", direction, destSprite);
             Debug.DrawLine(start, direction, color);
         }
     }
