@@ -9,9 +9,17 @@ public class Character
 
     public float speed;
 
+    Queue<Job> jobs;
+
+    bool busy;
+    float timer;
     //Next path point
     float destx;
     float desty;
+
+    //End of the path
+    int endx;
+    int endy;
 
     Stack<Tuple<int, int>> currentPath;
 
@@ -48,6 +56,67 @@ public class Character
         currentPath = new Stack<Tuple<int, int>>();
         destx = X;
         desty = Y;
+        busy = false;
+        jobs = new Queue<Job>();
+    }
+
+    public void addJob(Job job)
+    {
+        jobs.Enqueue(job);
+    }
+
+    public bool isMovingTo(Tile tile)
+    {
+        return tile.X != endx || tile.Y != endy;
+    }
+
+
+    public void doJobs(Map currentMap)
+    {
+        if (jobs.Count != 0)
+        {
+            busy = true;
+            Job currentJob = jobs.Peek();
+            Tile jobTile = currentMap.getClosestWalkable((int)currentJob.Tile.X, (int)currentJob.Tile.Y, X, Y);
+            if (jobTile == null)
+            {
+                jobs.Dequeue();
+                return;
+            }
+                
+
+            if (!currentJob.Done)
+            {
+                if (currentMap.getTile((int)X,(int)Y)!=jobTile && currentMap.getTile((int)destx, (int)desty)!=jobTile)
+                {
+                    if(isMovingTo(jobTile))
+                        commandMovementTo(jobTile.X, jobTile.Y, currentMap);    
+                }
+                else
+                {
+                    currentJob.performJob();
+                }
+            }
+            else
+            {
+                jobs.Dequeue();
+            }
+        }
+        else
+        {
+            //DO a random walk every 4 seconds if not busy
+            timer += Time.deltaTime;
+            if (busy==false && timer>4.0f)
+            {
+                if (UnityEngine.Random.Range(0, 11)/10 >0.5)
+                    return;
+                int xOffset = UnityEngine.Random.Range(-5, 5);
+                int yOffset = UnityEngine.Random.Range(-5, 5);
+                if (currentMap.isBound((int)X + xOffset, (int)Y + yOffset))
+                    commandMovementTo((int)X + xOffset, (int)Y + yOffset, currentMap);
+                timer = 0.0f;
+            }
+        }
     }
 
     public void move()
@@ -68,16 +137,18 @@ public class Character
 
     public void commandMovementTo(int x, int y, Map currentMap)
     {
-        //Stop at a current closest tile in case of pending movement
-        destx = (int)X;
-        desty = (int)Y;
-
-
         if (x == (int)destx && y == (int)desty)
             return;
 
-        Debug.Log((int)destx + " " + (int)desty);
-        Debug.Log(x + " " + y);
+        float lastTileDist = Vector2.Distance(new Vector2((int)X, (int)Y), new Vector2(x, y));
+        float nextTileDitst = Vector2.Distance(new Vector2(destx, desty), new Vector2(x, y));
+
+        //Stop at a current closest tile to the destination
+        if (lastTileDist <= nextTileDitst)
+        {
+            destx = (int)X;
+            desty = (int)Y;
+        }
 
         //Recalculate path
         calculatePath(x, y, currentMap);
@@ -199,11 +270,7 @@ public class Character
             bestTile = tileMat[bestTile.camefrom.Item1, bestTile.camefrom.Item2];
         }
 
-        /*
-        //Get next path point from the stack
-        Tuple<int,int> next = currentPath.Pop();
-        destx = next.Item1;
-        desty = next.Item2;
-        */
+        endx = x;
+        endy = y;
     }
 }

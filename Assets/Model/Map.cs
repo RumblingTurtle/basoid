@@ -45,12 +45,11 @@ public class Map
         {
             for (int j = 0; j < height; j++)
             {
-                float tileType = Mathf.PerlinNoise(i-0.5f,j-0.5f)*maxValue;
-
+                float tileType = Mathf.PerlinNoise(((float)i /width)*10,((float)j /height)*10)*maxValue;
                 if (0 <= tileType && tileType < maxValue/3)
-                    tiles[i, j].Type = Tile.TileType.Empty;
-                else if(maxValue / 3 <= tileType && tileType < 1 * maxValue / 2.3f)
                     tiles[i, j].Type = Tile.TileType.Wall;
+                else if(maxValue / 3 <= tileType && tileType < 1 * maxValue / 2.3f)
+                    tiles[i, j].Type = Tile.TileType.Empty;
                 else
                     tiles[i, j].Type = Tile.TileType.Floor;
             }
@@ -92,8 +91,34 @@ public class Map
         }
     }
 
-    //Checks if coordinates are within map bounds
-    public bool isBound(int a, int b)
+    public Tile getClosestWalkable(int toX, int toY, float fromX, float fromY)
+    {
+        Tile result = null;
+        float minDist = float.PositiveInfinity;
+
+        for (int i = -1; i < 2; i++)
+        {
+            for (int j = -1; j < 2; j++)
+            {
+                bool isDiagonal = Mathf.Abs(i) == Mathf.Abs(j) && i != 0;
+                bool bound = isBound(toX + i, toY + j);
+                if (isDiagonal|| !bound)
+                    continue;
+                if(tiles[toX + i, toY + j].isWalkable())
+                {
+                    float dist = Vector2.Distance(new Vector2(toX + i, toY + j), new Vector2(fromX, fromY));
+                    if (dist<minDist)
+                    {
+                        minDist = dist;
+                        result = tiles[toX + i, toY + j];
+                    }
+                }
+            }
+        }
+        return result;
+    }
+            //Checks if coordinates are within map bounds
+            public bool isBound(int a, int b)
     {
         return Mathf.Clamp(a, 0, Width - 1) == a && Mathf.Clamp(b, 0, Height - 1) == b;
     }

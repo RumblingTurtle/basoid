@@ -7,7 +7,7 @@ public class CameraController : MonoBehaviour
     // Start is called before the first frame update
     void Start()
     {
-
+        Camera.main.transform.position = new Vector3(0.0f,23.0f,-40.0f);
     }
 
     Vector3 lastDragPos; //Last drag position
@@ -49,9 +49,9 @@ public class CameraController : MonoBehaviour
 
             Vector3 newPosition = Camera.main.transform.position;
 
-            newPosition.x = Mathf.Clamp(newxpos, 0 , mapWidth);
-            newPosition.y = Mathf.Clamp(newypos, 0, mapHeight);
-
+            newPosition.x = newxpos;
+            newPosition.y = newypos;
+            //Debug.Log(displacement);
             Camera.main.transform.position = newPosition;
         }
         

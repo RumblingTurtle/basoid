@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using UnityEngine;
 using UnityEngine.UI;
+using Random = UnityEngine.Random;
 
 
 public class MapController : MonoBehaviour
@@ -10,28 +11,40 @@ public class MapController : MonoBehaviour
 
     public Sprite selectionSprite; // Mouse selection sprite
     public Sprite backgroundSprite; // Background dirt sprite  
-    public Sprite characterSprite; // Default character sprite
     public Sprite destSprite; // Default character sprite
 
-    //Object for tile groupings
+    //Objects for tile groupings
     GameObject backgroundGroup;
     GameObject tileGroup;
+    GameObject characterGroup;
+
+    GameObject pathObj; //Current rendered path
+
+    Character selectedCharacter;
 
     //Chracter movement command mode
     public static bool commandMode;
+    public static bool destroyMode;
 
     //Sprites for contextual wall placement
-    Sprite[] wallSprites;
-    Dictionary<string, Sprite> wallSpriteDict;
+
+    Dictionary<string, Sprite> wallSprites;
+    Dictionary<string, Sprite> charSprites;
+    Dictionary<string, Sprite> guiSprites;
 
     //Character entities for rendering and data
-    Character c;
-    GameObject characterObj;
+    List<Tuple<Character,GameObject>> characters;
+    Queue<Job> availableJobs;
+    List<Job> pendingJobs;
 
     Map map; // Current world map
 
     GameObject selectionTile; // Game object for selection display
     Text textbox; // Tile info text
+    GameObject button;
+    GameObject destroyButton;
+
+    GameObject selectedCharacterInfo;
 
     int mapWidth;
     int mapHeight;
@@ -43,19 +56,28 @@ public class MapController : MonoBehaviour
 
     void Start()
     {
+        commandMode = false;
+        destroyMode = false;
+
         mapWidth = 50;
         mapHeight = 50;
-        commandMode = false;
+
         map = new Map(mapWidth, mapHeight);
-        textbox = GameObject.Find("Text").GetComponent<Text>();
+        availableJobs = new Queue<Job>();
+        pendingJobs = new List<Job>();
 
-        c = new Character("Ivan", 0,0);
-        characterObj = initObj("ivan", new Vector3(0.5f, 0.5f, -4), characterSprite);
+        textbox = GameObject.Find("TileInfo").GetComponent<Text>();
 
-        Camera.main.transform.position = new Vector3(mapWidth/2, mapHeight/2,-10);
+        characters = new List<Tuple<Character, GameObject>>();
 
-        // Init selection game oject 
-        selectionTile = initObj("Selection tile",new Vector3(0,0,0), selectionSprite);
+        pathObj = new GameObject();
+        pathObj.name = "Path Renderer";
+        LineRenderer pathRenderer = pathObj.AddComponent<LineRenderer>();
+
+        pathRenderer.startWidth=0.2f;
+        pathRenderer.endWidth=0.2f;
+
+        selectionTile = initObj("Selection tile",new Vector3(0.5f,0.5f,-1), selectionSprite);
 
         backgroundGroup = new GameObject();
         backgroundGroup.name = "Background tiles";
@@ -63,21 +85,38 @@ public class MapController : MonoBehaviour
         tileGroup = new GameObject();
         tileGroup.name = "Foreground tiles";
 
+        characterGroup = new GameObject();
+        characterGroup.name = "Characters";
 
-        wallSprites = Resources.LoadAll<Sprite>("Textures/Wall");
-        wallSpriteDict = new Dictionary<string, Sprite>();
-        foreach (Sprite s in wallSprites)
-        {
-            //Debug.Log(s.name);
-            wallSpriteDict[s.name] = s;
-        }
+        selectedCharacterInfo = GameObject.Find("CharacterInfo");
+        selectedCharacterInfo.SetActive(false);
 
-        GameObject.Find("Button").GetComponent<Button>().onClick.AddListener(() => { changeMode(); });
+        wallSprites = getSpritesFromDir("Textures/Wall");
+        charSprites = getSpritesFromDir("Textures/Characters");
+        guiSprites = getSpritesFromDir("Textures/GUI");
+        
+        button = GameObject.Find("CommandModeButton");
+        button.SetActive(false);
+        button.GetComponent<Button>().onClick.AddListener(() => { changeMode("command"); });
+        button.GetComponent<Image>().sprite = guiSprites["commandIconUnactive"];
+
+        destroyButton = GameObject.Find("DestroyButton");
+        destroyButton.GetComponent<Button>().onClick.AddListener(() => { changeMode("destroy"); });
 
         initTiles();
 
+        addCharacter(new Character("Ivan", 0, 0),getRandomSprite(charSprites));
+        addCharacter(new Character("Oleg", 2, 2), getRandomSprite(charSprites));
+
         map.randomizeTiles();
         //map.randomizeByWalking();
+    }
+
+    public void addCharacter(Character c, Sprite sprite)
+    {
+        GameObject characterObj = initObj(c.Name, new Vector3(c.X+0.5f, c.Y+0.5f, -4), sprite);
+        characters.Add(new Tuple<Character, GameObject>(c,characterObj));
+        characterObj.transform.SetParent(characterGroup.transform);
     }
 
     public void initTiles()
@@ -90,6 +129,7 @@ public class MapController : MonoBehaviour
                 GameObject btile = initObj("background_tile_" + i + "_" + j,
                                             new Vector3(i + 0.5f, j + 0.5f, 5),
                                             backgroundSprite);
+
                 btile.transform.SetParent(backgroundGroup.transform);
 
                 // And then the tile itself
@@ -116,44 +156,110 @@ public class MapController : MonoBehaviour
     // Update is called once per frame
     void Update()
     {
-        renderPath(c);
-        c.move();
-        characterObj.transform.position = new Vector3(c.X+0.5f,c.Y+0.5f,-4);
+        moveAllCharacters();
+        updateCharacterInfoPanel();
         processSelection();
+        distributeJobs();
+        performJobs();
+    }
+
+    Dictionary<string, Sprite> getSpritesFromDir(string dir)
+    {
+        Dictionary<string, Sprite> dict = new Dictionary<string, Sprite>();
+        Sprite[] sprites = Resources.LoadAll<Sprite>(dir);
+        foreach (Sprite s in sprites)
+        {
+            //Debug.Log(s.name);
+            dict[s.name] = s;
+        }
+        return dict;
+    }
+
+    void moveAllCharacters()
+    {
+        foreach(Tuple<Character,GameObject> ct in characters)
+        {
+            Character c = ct.Item1;
+            GameObject cobj = ct.Item2;
+
+            if(selectedCharacter==c)
+                renderPath(c);
+
+            c.move();
+            cobj.transform.position = new Vector3(c.X + 0.5f, c.Y + 0.5f, -4);
+        }
+    }
+
+    void performJobs()
+    {
+        foreach (Tuple<Character, GameObject> ct in characters)
+        {
+            Character c = ct.Item1;
+            c.doJobs(map);
+        }
+    }
+
+    void distributeJobs()
+    {
+        while (availableJobs.Count!=0)
+        {
+                Character c = characters[Random.Range(0, characters.Count)].Item1;
+                Job currentJob = availableJobs.Dequeue();
+                if (getPendingJob(currentJob.Tile)==null)
+                {
+                    c.addJob(currentJob);
+                    pendingJobs.Add(currentJob);
+                }
+        }
+    }
+
+    Character getCharacterAt(int x, int y)
+    {
+        foreach (Tuple<Character, GameObject> ct in characters)
+        {
+            Character c = ct.Item1;
+            if ((int)c.X == x && (int)c.Y == y)
+                return c;
+        }
+        return null;
+    }
+
+    GameObject getCharacterObjAt(int x, int y)
+    {
+        foreach (Tuple<Character, GameObject> ct in characters)
+        {
+            Character c = ct.Item1;
+            if ((int)c.X == x && (int)c.Y == y)
+                return ct.Item2;
+        }
+        return null;
     }
 
     //Renders current path of a given character
     void renderPath(Character character)
     {
- 
-        if (!character.isMoving())
+        LineRenderer pathRenderer = pathObj.GetComponent<LineRenderer>();
+
+        if (!character.isMoving() || !commandMode)
+        {
+            pathRenderer.enabled = false;
             return;
+        } else
+            pathRenderer.enabled = true;
+
+
 
         Tuple<int, int>[] path = character.CurrentPath.ToArray();
 
+        pathRenderer.positionCount = path.Length + 2;
+
         Color color = Color.blue;
 
-        //Draw ray from current to next tile
-        Vector3 start = new Vector3(character.X + 0.5f, character.Y + 0.5f, -8);
-        Vector3 direction = new Vector3(character.Destx + 0.5f, character.Desty + 0.5f, -8);
-        Debug.DrawLine(start, direction, color);
-
-        //Draw from next point to the point on top of the stack
-        if(path.Length!=0)
-        {
-            start = new Vector3(character.Destx + 0.5f, character.Desty + 0.5f, -8);
-            direction = new Vector3(path[0].Item1 + 0.5f, path[0].Item2 + 0.5f, -8);
-            //GameObject d = initObj("dest", direction, destSprite);
-            Debug.DrawLine(start, direction, color);
-        }
-
-        for (int i = 0; i < path.Length - 1; i++)
-        {
-            start = new Vector3(path[i].Item1 + 0.5f, path[i].Item2 + 0.5f, -8);
-            direction = new Vector3(path[i + 1].Item1 + 0.5f, path[i + 1].Item2 + 0.5f, -8);
-            //GameObject p = initObj("d", direction, destSprite);
-            Debug.DrawLine(start, direction, color);
-        }
+        pathRenderer.SetPosition(0, new Vector3(character.X + 0.5f, character.Y + 0.5f, -2));
+        pathRenderer.SetPosition(1, new Vector3(character.Destx+ 0.5f, character.Desty + 0.5f, -2));
+        
+        for (int i = 0; i < path.Length; i++)
+            pathRenderer.SetPosition(i+2, new Vector3(path[i].Item1 + 0.5f, path[i].Item2 + 0.5f, -2));
     }
 
     public void processSelection()
@@ -167,55 +273,134 @@ public class MapController : MonoBehaviour
 
         bool inBoundary = currentx < mapWidth && currentx >= 0 && currenty < mapHeight && currenty >= 0;
 
+        Character c = getCharacterAt(currentx, currenty);
+
+        bool characterIsSelected = selectedCharacter != null;
+
         //Check if selected tile location has changed
         if ((lastx != currentx || lasty != currenty) && inBoundary && Input.touchCount != 2)
-        {
+        { 
             selectionTile.transform.position = new Vector3(currentx + 0.5f, currenty + 0.5f, -1);
             //Add text to the info panel
             textbox.text = map.getTile(currentx, currenty).Type.ToString();
             textbox.text += " " + currentx + " " + currenty;
             lastx = currentx;
             lasty = currenty;
+
+        }
+
+        //If selection is made not in command mode
+        if (Input.GetMouseButton(0) && !commandMode && !CameraController.isMouseOverUI())
+        {
+            if (c != null)
+            {
+                selectedCharacter = c;
+                selectedCharacterInfo.SetActive(true);
+                button.SetActive(true);
+            }
+            else
+            {
+                selectedCharacterInfo.SetActive(false);
+                selectedCharacter = null;
+                button.SetActive(false);
+            }
+
+
         }
 
         //If in command mode and selection is performed
-        if(Input.GetMouseButton(0) && commandMode)
+        if (Input.GetMouseButton(0) && commandMode && characterIsSelected)
         {
-            c.commandMovementTo(lastx, lasty, map);
+            selectedCharacter.commandMovementTo(currentx, currenty, map);
+        }
+
+
+        if (destroyMode && Input.GetMouseButton(0) && !CameraController.isMouseOverUI() && map.isBound(currentx,currenty))
+        {
+            Tile currentTile = map.getTile(currentx, currenty);
+            if (currentTile.isWall())
+            {
+                Job newDestroyJob = new Job(currentTile, 3.0f, 1.0f);
+                newDestroyJob.registerJobDoneCallback(removeWall);
+                
+                if (!availableJobs.Contains(newDestroyJob) && !pendingJobs.Contains(newDestroyJob))
+                {
+                    availableJobs.Enqueue(newDestroyJob);
+                }
+            }
+
         }
     } 
+
+    Job getPendingJob(Tile tile)
+    {
+        foreach (Job job in pendingJobs)
+        {
+            if (job.Tile.X == tile.X && job.Tile.Y == tile.Y)
+                return job;
+        }
+        return null;
+    }
+
+    void removeWall(Tile tile)
+    {
+        Job job = getPendingJob(tile);
+        if (job!=null)
+            pendingJobs.Remove(job);
+
+        tile.Type = Tile.TileType.Empty;
+    }
+
+    void updateCharacterInfoPanel()
+    {
+        if (selectedCharacterInfo.activeSelf == false)
+            return;
+
+        Text name = selectedCharacterInfo.transform.Find("CharacterName").GetComponent<Text>();
+        Image picture = selectedCharacterInfo.transform.Find("CharacterImage").GetComponent<Image>();
+        Text info = selectedCharacterInfo.transform.Find("InfoText").GetComponent<Text>();
+
+        name.text = selectedCharacter.Name;
+        info.text = "X: " + (int)selectedCharacter.X + " Y: " + (int)selectedCharacter.Y;
+        info.text += "\nSpeed: " + selectedCharacter.speed;
+
+        SpriteRenderer spriteRenderer = getCharacterObjAt((int)selectedCharacter.X, (int)selectedCharacter.Y).
+            GetComponent<SpriteRenderer>();
+
+        picture.sprite = spriteRenderer.sprite;
+    }
 
     // Tile type update callback
     void onTileTypeChanged(Tile tile, GameObject tileObj)
     {
+        int x = tile.X;
+        int y = tile.Y;
+
         if (tile.Type == Tile.TileType.Floor)
             tileObj.GetComponent<SpriteRenderer>().sprite = floorSprite;
         else if (tile.isWall())
         {
-            int x = tile.X;
-            int y = tile.Y;
             tileObj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x, y);
-
-
-            //Update neighbours
-            for (int i = -1; i < 2; i++)
-            {
-                for (int j = -1; j < 2; j++)
-                {
-                    bool isCurrentOrDiagonal = i == j;
-
-                    if (!isCurrentOrDiagonal && map.isBound(x + i, y + j) && map.getTile(x + i, y + j).isWall())
-                    {
-                        GameObject ntileobj = GameObject.Find("tile_" + (x + i) + "_" + (y + j));
-                        ntileobj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x + i, y + j);
-                    }
-                }
-            }
         }
         else if (tile.Type == Tile.TileType.Empty)
             tileObj.GetComponent<SpriteRenderer>().sprite = null;
         else
             Debug.Log("Tile types are not matching default ones?!");
+
+        //Update neighbours
+        for (int i = -1; i < 2; i++)
+        {
+            for (int j = -1; j < 2; j++)
+            {
+                bool isCurrentOrDiagonal = i == j;
+
+                if (!isCurrentOrDiagonal && map.isBound(x + i, y + j) && map.getTile(x + i, y + j).isWall())
+                {
+                    GameObject ntileobj = GameObject.Find("tile_" + (x + i) + "_" + (y + j));
+                    ntileobj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x + i, y + j);
+                }
+            }
+        }
     }
 
     // Returns wall sprite that will suit the neighbours around given tile
@@ -234,7 +419,7 @@ public class MapController : MonoBehaviour
 
         //Debug.Log(x+" "+ y+" "+spritename);
 
-        return wallSpriteDict[spritename];
+        return wallSprites[spritename];
 
     }
 
@@ -248,19 +433,41 @@ public class MapController : MonoBehaviour
         return obj;
     }
 
-    void changeMode()
+    Sprite getRandomSprite(Dictionary<string, Sprite> sprites)
     {
-        if (commandMode)
+        Sprite[] s = new Sprite[sprites.Count];
+        sprites.Values.CopyTo(s, 0);
+
+        int selectedSprite = UnityEngine.Random.Range(0, s.Length);
+
+        return s[selectedSprite];
+    }
+
+    void changeMode(string mode)
+    {
+
+        if(mode=="command")
         {
-            GameObject.Find("Button").GetComponent<Button>().
-                GetComponentInChildren<Text>().text = "Command mode";
-            commandMode = false;
+            if (destroyMode)
+                destroyMode = false;
+
+            if (commandMode)
+            {
+                button.GetComponent<Image>().sprite = guiSprites["commandIconUnactive"];
+                commandMode = false;
+            }
+            else
+            {
+                button.GetComponent<Image>().sprite = guiSprites["commandIconActive"];
+                commandMode = true;
+            }
+
         }
-        else
+        else if(mode=="destroy")
         {
-            GameObject.Find("Button").GetComponent<Button>().
-                GetComponentInChildren<Text>().text = "Movement mode";
-            commandMode = true;
+            button.GetComponent<Image>().sprite = guiSprites["commandIconUnactive"];
+            commandMode = false;
+            destroyMode = true;
         }
 
     }
