@@ -2,9 +2,13 @@
 using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using Random = UnityEngine.Random;
 
 public class Character
 {
+    public static string[] firstNames = new string[]{"Oleg","Ivan","Artur","Simon","Ben","Fred"};
+    public static string[] lastNames = new string[] { "Vasilyev", "Begov", "Serov", "Artemyev", "Sanders", "Perry" };
+
     string name;
 
     public float speed;
@@ -58,6 +62,11 @@ public class Character
         desty = Y;
         busy = false;
         jobs = new Queue<Job>();
+    }
+
+    public static string randomName()
+    {
+        return firstNames[Random.Range(0, firstNames.Length)] + " " + lastNames[Random.Range(0, lastNames.Length)];
     }
 
     public void addJob(Job job)
@@ -213,7 +222,7 @@ public class Character
                     //And add new tile to the opened set
 
                     openedSet.Add(tileMat[tile.x + i, tile.y + j]);
-                    //Debug.Log("Added " + neighbour.x+" "+neighbour.y);
+                    //("Added " + neighbour.x+" "+neighbour.y);
                 }
             }
         };

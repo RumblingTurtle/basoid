@@ -7,7 +7,17 @@ using Random = UnityEngine.Random;
 
 public class MapController : MonoBehaviour
 {
+    /*
+     * Chunks as maps -> chunk should have map instance
+     * Optimize callbacks to chunk data texture updates
+     * Add chunk detection on update
+     * Created chunk should create scaled and translated plane
+     * Generators should have access to adjacent chunks (->generation should be defined in map controller class)
+     * Add plant wind wiggle
+     */
+     
     public Sprite floorSprite; // Default floor sprite
+    public Sprite waterSprite;
 
     public Sprite selectionSprite; // Mouse selection sprite
     public Sprite backgroundSprite; // Background dirt sprite  
@@ -27,8 +37,7 @@ public class MapController : MonoBehaviour
     public static bool destroyMode;
 
     //Sprites for contextual wall placement
-
-    Dictionary<string, Sprite> wallSprites;
+    
     Dictionary<string, Sprite> charSprites;
     Dictionary<string, Sprite> guiSprites;
 
@@ -37,6 +46,7 @@ public class MapController : MonoBehaviour
     Queue<Job> availableJobs;
     List<Job> pendingJobs;
 
+    Dictionary<Tuple<int, int>, Chunk> chunks;
     Map map; // Current world map
 
     GameObject selectionTile; // Game object for selection display
@@ -49,20 +59,24 @@ public class MapController : MonoBehaviour
     int mapWidth;
     int mapHeight;
 
+    int numOfCharacters = 10;
+
     public int MapWidth { get => mapWidth; }
     public int MapHeight { get => mapHeight; }
 
     public Map Map { get => map; private set => map = value; }
 
+    Chunk terrain;
+    Chunk plants;
+
+    Chunk selectionChunk;
+
     void Start()
     {
+        
         commandMode = false;
         destroyMode = false;
 
-        mapWidth = 50;
-        mapHeight = 50;
-
-        map = new Map(mapWidth, mapHeight);
         availableJobs = new Queue<Job>();
         pendingJobs = new List<Job>();
 
@@ -79,19 +93,12 @@ public class MapController : MonoBehaviour
 
         selectionTile = initObj("Selection tile",new Vector3(0.5f,0.5f,-1), selectionSprite);
 
-        backgroundGroup = new GameObject();
-        backgroundGroup.name = "Background tiles";
-
-        tileGroup = new GameObject();
-        tileGroup.name = "Foreground tiles";
-
         characterGroup = new GameObject();
         characterGroup.name = "Characters";
 
         selectedCharacterInfo = GameObject.Find("CharacterInfo");
         selectedCharacterInfo.SetActive(false);
-
-        wallSprites = getSpritesFromDir("Textures/Wall");
+        
         charSprites = getSpritesFromDir("Textures/Characters");
         guiSprites = getSpritesFromDir("Textures/GUI");
         
@@ -103,13 +110,71 @@ public class MapController : MonoBehaviour
         destroyButton = GameObject.Find("DestroyButton");
         destroyButton.GetComponent<Button>().onClick.AddListener(() => { changeMode("destroy"); });
 
-        initTiles();
+        mapWidth = 33;
+        mapHeight = 33;
 
-        addCharacter(new Character("Ivan", 0, 0),getRandomSprite(charSprites));
-        addCharacter(new Character("Oleg", 2, 2), getRandomSprite(charSprites));
+        map = new Map(mapWidth, mapHeight);
+        Chunk firstChunk = new Chunk(mapWidth, mapHeight, 0, 0);
+        chunks = new Dictionary<Tuple<int, int>, Chunk>();
+        
 
-        map.randomizeTiles();
-        //map.randomizeByWalking();
+        float grain = 3.0f;
+
+        chunks[new Tuple<int, int>(0, 0)] = firstChunk;
+        chunks[new Tuple<int, int>(0, 0)] = MapGenerators.diamondSquareGenerator(0, 0, chunks, grain, false);
+        firstChunk.destroy();
+
+        chunks[new Tuple<int, int>(-1, 0)] = MapGenerators.diamondSquareGenerator(-1, 0, chunks, grain, true);
+
+        chunks[new Tuple<int, int>(0, -1)] = MapGenerators.diamondSquareGenerator(0, -1, chunks, grain, true);
+
+        chunks[new Tuple<int, int>(0, 1)] = MapGenerators.diamondSquareGenerator(0, 1, chunks, grain, true);
+
+        chunks[new Tuple<int, int>(1, 0)] = MapGenerators.diamondSquareGenerator(1, 0, chunks, grain, true);
+
+        chunks[new Tuple<int, int>(-1, -1)] = MapGenerators.diamondSquareGenerator(-1, -1, chunks, grain, true);
+        chunks[new Tuple<int, int>(-1, 1)] = MapGenerators.diamondSquareGenerator(-1, 1, chunks, grain, true);
+        chunks[new Tuple<int, int>(1, -1)] = MapGenerators.diamondSquareGenerator(1, -1, chunks, grain, true);
+        chunks[new Tuple<int, int>(1, 1)] = MapGenerators.diamondSquareGenerator(1, 1, chunks, grain, true);
+
+        for (int i = -2; i < 3; i++)
+        {
+            for (int j = -2; j < 3; j++)
+            {
+                if ((i >= -1 && i <= 1) && (j >= -1 && j <= 1))
+                    continue;
+                chunks[new Tuple<int, int>(i, j)] = MapGenerators.diamondSquareGenerator(i, j, chunks, grain, true);
+
+            }
+        }
+
+        for (int i = -2; i < 3; i++)
+        {
+            for (int j = -2; j < 3; j++)
+            {
+                MapGenerators.reassignBiomes(i, j, chunks);
+                MapGenerators.generatePlants(i, j, chunks);
+                chunks[new Tuple<int, int>(i, j)].syncWithMap();
+                chunks[new Tuple<int, int>(i, j)].bakeShadows();
+            }
+        }
+
+        //terrain = new Chunk(mapWidth, mapHeight, 0, 0, true,true);
+        //plants = new Chunk(mapWidth, mapHeight, 0, 0, false,true);
+
+        //map.generateTilemapPerlin();
+        //map.generateTilemapCelluar(50, 4);
+        //startTime = System.DateTime.UtcNow;
+        //initTiles();
+        //map.generateTilemapDiamondSquare(10);
+        //Debug.Log("time " + timePassed.Milliseconds.ToString());
+
+        /*
+        for (int i = 0; i<2;i++)
+        {
+            Tile charTile = map.getRandomWalkable(10);
+            //addCharacter(new Character(Character.randomName(), charTile.X, charTile.Y), getRandomSprite(charSprites));
+        }*/
     }
 
     public void addCharacter(Character c, Sprite sprite)
@@ -152,15 +217,30 @@ public class MapController : MonoBehaviour
 
     int lastx;
     int lasty;
-
+    int x = 0;
+    int y = 0;
     // Update is called once per frame
     void Update()
     {
-        moveAllCharacters();
-        updateCharacterInfoPanel();
+        if (x == MapHeight)
+        {
+            x = 0;
+        }
+        if (y == MapHeight)
+            y = 0;
+
+        //if (Time.realtimeSinceStartup % 2.0 < 1.0)
+          //  chunks[new Tuple<int, int>(0, 0)].setCellType(x,y,Tile.TileType.Wall);
+        //        if(Time.realtimeSinceStartup%2.0<1.0)
+        //          ch1.setCellType(Random.Range(0,map.Height), Random.Range(0, map.Width),Tile.TileType.Water);
+        x++;
+
+        //moveAllCharacters();
+        //updateCharacterInfoPanel();
         processSelection();
-        distributeJobs();
-        performJobs();
+        //distributeJobs();
+        //performJobs();
+        
     }
 
     Dictionary<string, Sprite> getSpritesFromDir(string dir)
@@ -268,8 +348,8 @@ public class MapController : MonoBehaviour
             return;
 
         Vector3 mousepos = Camera.main.ScreenToWorldPoint(Input.mousePosition);
-        int currentx = (int) mousepos.x;
-        int currenty = (int) mousepos.y;
+        int currentx = (int)mousepos.x;
+        int currenty = (int)mousepos.y;
 
         bool inBoundary = currentx < mapWidth && currentx >= 0 && currenty < mapHeight && currenty >= 0;
 
@@ -277,15 +357,45 @@ public class MapController : MonoBehaviour
 
         bool characterIsSelected = selectedCharacter != null;
 
+
         //Check if selected tile location has changed
-        if ((lastx != currentx || lasty != currenty) && inBoundary && Input.touchCount != 2)
-        { 
-            selectionTile.transform.position = new Vector3(currentx + 0.5f, currenty + 0.5f, -1);
-            //Add text to the info panel
-            textbox.text = map.getTile(currentx, currenty).Type.ToString();
-            textbox.text += " " + currentx + " " + currenty;
-            lastx = currentx;
-            lasty = currenty;
+        if ((lastx != currentx || lasty != currenty) && Input.touchCount != 2)
+        {
+
+            int chunkX = Mathf.FloorToInt((float)currentx / mapWidth);
+            int chunkY = Mathf.FloorToInt((float)currenty / mapWidth);
+
+            int offsetX = Mathf.Abs(currentx - chunkX * mapHeight);
+            int offsetY = Mathf.Abs(currenty - chunkY * mapHeight);
+
+            bool check = true;
+            if (selectionChunk== null || selectionChunk.X!=chunkX || selectionChunk.Y != chunkY)
+                check = chunks.TryGetValue(new Tuple<int, int>(chunkX, chunkY), out selectionChunk);
+
+            if (check)
+            {
+                int spriteX = currentx >= 0 ? currentx : currentx - 1;
+                int spriteY = currenty >= 0 ? currenty : currenty - 1;
+                currentx = spriteX;
+                currenty = spriteY;
+                selectionTile.transform.position = new Vector3(spriteX + 0.5f, spriteY+0.5f, -1);
+                //Add text to the info panel
+                
+                Tile currentTile = selectionChunk.map.getTile(offsetX, offsetY);
+                textbox.text = currentTile.Type.ToString();
+
+                textbox.text += " Biome: " + currentTile.Biome.ToString() + "\n";
+                textbox.text += " Chunk : " + chunkX +" "+chunkY + "\n";
+                textbox.text += " Offset: " + offsetX + " " + offsetY + "\n";
+
+                Tuple<int, int> woldPos = selectionChunk.getTileWorldPos(offsetX,offsetY);
+                textbox.text += "World position " + woldPos.Item1 + " " + woldPos.Item2 + "\n";
+                
+                lastx = currentx;
+                lasty = currenty;
+                
+            }
+
 
         }
 
@@ -382,6 +492,8 @@ public class MapController : MonoBehaviour
         {
             tileObj.GetComponent<SpriteRenderer>().sprite = getProperWallSprite(x, y);
         }
+        else if (tile.Type == Tile.TileType.Water)
+            tileObj.GetComponent<SpriteRenderer>().sprite = waterSprite;
         else if (tile.Type == Tile.TileType.Empty)
             tileObj.GetComponent<SpriteRenderer>().sprite = null;
         else
@@ -419,7 +531,7 @@ public class MapController : MonoBehaviour
 
         //Debug.Log(x+" "+ y+" "+spritename);
 
-        return wallSprites[spritename];
+        return null;
 
     }
 
@@ -469,6 +581,5 @@ public class MapController : MonoBehaviour
             commandMode = false;
             destroyMode = true;
         }
-
     }
 }

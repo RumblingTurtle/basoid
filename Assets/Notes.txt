@@ -1,0 +1,14 @@
+﻿Refactor:
+	MapGenerators+
+	Tile + 
+		Offload all height to Tile.TileType convertations to static members of Tile class +
+	Map+
+	Chunk+ 
+	TextureGenerator
+
+Change order of textures in the atlas+
+
+Add higher weight to neighbour chunk values ->!!!
+
+Fix negative coordinate selection tile 
+Some of the chuncks have rough transitions
