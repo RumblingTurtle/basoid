@@ -1,3 +1,3 @@
 # basoid
-Base building game for Android
+Base building game 
 ![](demo.gif)
